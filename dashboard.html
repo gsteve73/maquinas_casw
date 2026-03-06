@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor RPM — Máquina 01</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg:       #07090c;
+  --surface:  #0e1318;
+  --border:   #182030;
+  --accent:   #e8ff00;
+  --cyan:     #00d4ff;
+  --red:      #ff2b4a;
+  --green:    #00f57a;
+  --orange:   #ff7300;
+  --text:     #c4d4e0;
+  --muted:    #3a5068;
+  --warn-bg:  rgba(255,43,74,0.08);
+  --warn-border: rgba(255,43,74,0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow Condensed', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Subtle grid texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── CONFIG OVERLAY ─────────────────────────── */
+#config-overlay {
+  position: fixed; inset: 0;
+  background: rgba(7,9,12,0.97);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.config-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 40px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.config-box h2 {
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.config-box p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 28px;
+  line-height: 1.6;
+}
+
+.field { margin-bottom: 18px; }
+
+.field label {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  color: var(--cyan);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.field input:focus { border-color: var(--accent); }
+
+.field .hint {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  margin-top: 8px;
+}
+
+.btn-primary:hover { opacity: 0.85; }
+
+/* ── LAYOUT ─────────────────────────────────── */
+#app {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+  display: none;
+}
+
+/* ── HEADER ─────────────────────────────────── */
+header {
+  padding: 24px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brand-name {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.brand-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 1px;
+  color: var(--green);
+  border: 1px solid rgba(0,245,122,0.3);
+  padding: 5px 12px;
+  border-radius: 2px;
+}
+
+.live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+.last-update {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.btn-config {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 3px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+
+.btn-config:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── ALERT BANNER ───────────────────────────── */
+#alert-banner {
+  display: none;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-left: 4px solid var(--red);
+  border-radius: 4px;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--red);
+  animation: flash 0.8s ease-in-out 3;
+}
+
+@keyframes flash { 50% { opacity: 0.5; } }
+
+/* ── RPM HERO ───────────────────────────────── */
+.rpm-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 36px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.rpm-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+}
+
+.rpm-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.rpm-label {
+  font-size: 0.65rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.rpm-value {
+  font-size: clamp(4rem, 10vw, 7rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 40px rgba(232,255,0,0.3);
+  transition: color 0.4s;
+  letter-spacing: -2px;
+}
+
+.rpm-value.warning { color: var(--red); text-shadow: 0 0 40px rgba(255,43,74,0.4); }
+
+.rpm-unit {
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-top: 4px;
+}
+
+/* Gauge arc */
+.gauge-wrap { position: relative; width: 180px; height: 100px; flex-shrink: 0; }
+
+canvas#gauge { display: block; }
+
+.gauge-label {
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Machine info */
+.machine-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-key {
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.info-val {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+/* ── STATS GRID ─────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.stat-card.min::after  { background: var(--cyan); }
+.stat-card.max::after  { background: var(--orange); }
+.stat-card.avg::after  { background: var(--green); }
+
+.stat-label {
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-card.min .stat-value { color: var(--cyan); }
+.stat-card.max .stat-value { color: var(--orange); }
+.stat-card.avg .stat-value { color: var(--green); }
+
+.stat-unit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── CHART ──────────────────────────────────── */
+.chart-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.panel-title {
+  font-size: 0.65rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.range-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.range-btn {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 2px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+
+.range-btn.active, .range-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(232,255,0,0.05);
+}
+
+.chart-container { position: relative; height: 240px; }
+
+/* ── ALERT CONFIG ───────────────────────────── */
+.alert-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.alert-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.alert-field label {
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.alert-field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.alert-field input:focus { border-color: var(--accent); }
+
+.alert-status {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  padding: 8px 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.alert-status.triggered {
+  border-color: var(--warn-border);
+  color: var(--red);
+  background: var(--warn-bg);
+}
+
+/* ── RECENT TABLE ───────────────────────────── */
+.table-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+}
+
+th {
+  text-align: left;
+  padding: 8px 14px;
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(24,32,48,0.6);
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+tr:hover td { background: rgba(255,255,255,0.02); }
+tr:last-child td { border-bottom: none; }
+
+.rpm-cell { color: var(--accent); font-weight: 600; }
+.rpm-cell.high { color: var(--red); }
+
+/* ── FOOTER ─────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 20px 0 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 1px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── RESPONSIVE ─────────────────────────────── */
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid .stat-card:last-child { grid-column: span 2; }
+  .rpm-hero { justify-content: center; text-align: center; }
+  .gauge-wrap { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── CONFIG OVERLAY ── -->
+<div id="config-overlay">
+  <div class="config-box">
+    <h2>⬡ RPM Monitor</h2>
+    <p>Ingresa tus credenciales de Supabase.<br>Se guardan solo en tu navegador.</p>
+
+    <div class="field">
+      <label>Supabase Project URL</label>
+      <input type="text" id="cfg-url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off"/>
+      <div class="hint">Settings → API → Project URL</div>
+    </div>
+
+    <div class="field">
+      <label>Supabase Anon Key</label>
+      <input type="password" id="cfg-key" placeholder="eyJhbGci..." autocomplete="off"/>
+      <div class="hint">Settings → API → anon public</div>
+    </div>
+
+    <div class="field">
+      <label>Nombre de la máquina (machine_id)</label>
+      <input type="text" id="cfg-machine" value="maquina_01"/>
+    </div>
+
+    <button class="btn-primary" onclick="saveConfig()">CONECTAR →</button>
+  </div>
+</div>
+
+<!-- ── APP ── -->
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <div class="brand-name">RPM Monitor</div>
+      <div class="brand-sub" id="machine-label">MAQUINA_01</div>
+    </div>
+    <div class="header-right">
+      <div class="live-badge"><div class="live-dot"></div>EN VIVO</div>
+      <div class="last-update" id="last-update">—</div>
+      <button class="btn-config" onclick="showConfig()">⚙ CONFIG</button>
+    </div>
+  </header>
+
+  <div id="alert-banner">⚠ ALERTA: RPM fuera de rango — <span id="alert-msg"></span></div>
+
+  <!-- RPM Hero -->
+  <div class="rpm-hero">
+    <div class="rpm-main">
+      <div class="rpm-label">Velocidad actual</div>
+      <div class="rpm-value" id="rpm-display">—</div>
+      <div class="rpm-unit">RPM</div>
+    </div>
+
+    <div class="gauge-wrap">
+      <canvas id="gauge" width="180" height="100"></canvas>
+      <div class="gauge-label">0 ——— 3000 RPM</div>
+    </div>
+
+    <div class="machine-info">
+      <div class="info-row">
+        <span class="info-key">Máquina</span>
+        <span class="info-val" id="info-machine">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Estado</span>
+        <span class="info-val" id="info-status" style="color:var(--green)">Conectando...</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Lecturas hoy</span>
+        <span class="info-val" id="info-count">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Última lectura</span>
+        <span class="info-val" id="info-ts">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card min">
+      <div class="stat-label">Mínimo</div>
+      <div class="stat-value" id="stat-min">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+    <div class="stat-card max">
+      <div class="stat-label">Máximo</div>
+      <div class="stat-value" id="stat-max">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+    <div class="stat-card avg">
+      <div class="stat-label">Promedio</div>
+      <div class="stat-value" id="stat-avg">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-panel">
+    <div class="panel-header">
+      <div class="panel-title">Historial de RPM</div>
+      <div class="range-btns">
+        <button class="range-btn active" onclick="setRange(5,this)">5 min</button>
+        <button class="range-btn" onclick="setRange(15,this)">15 min</button>
+        <button class="range-btn" onclick="setRange(60,this)">1 hora</button>
+        <button class="range-btn" onclick="setRange(1440,this)">24 h</button>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="rpmChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Alert config -->
+  <div class="alert-panel">
+    <div class="panel-header">
+      <div class="panel-title">Configuración de alertas</div>
+      <div class="alert-status" id="alert-status-badge">✓ Normal</div>
+    </div>
+    <div class="alert-row">
+      <div class="alert-field">
+        <label>RPM Mínimo (alerta)</label>
+        <input type="number" id="alert-min" value="200" min="0"/>
+      </div>
+      <div class="alert-field">
+        <label>RPM Máximo (alerta)</label>
+        <input type="number" id="alert-max" value="3000" min="0"/>
+      </div>
+      <div class="alert-field" style="flex:2;">
+        <label>Descripción</label>
+        <input type="text" id="alert-desc" value="Rango operativo normal"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent table -->
+  <div class="table-panel">
+    <div class="panel-header">
+      <div class="panel-title">Últimas lecturas</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Timestamp</th>
+          <th>Máquina</th>
+          <th>RPM</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="readings-tbody">
+        <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>RPM MONITOR · Datos en tiempo real desde Supabase · Actualiza cada 3 seg</footer>
+</div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+let MACHINE_ID   = 'maquina_01';
+let rangeMinutes = 5;
+let chart        = null;
+let gaugeCtx     = null;
+let pollTimer    = null;
+
+function saveConfig() {
+  const url     = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  const key     = document.getElementById('cfg-key').value.trim();
+  const machine = document.getElementById('cfg-machine').value.trim();
+
+  if (!url || !key) { alert('Ingresa URL y API Key'); return; }
+
+  SUPABASE_URL = url;
+  SUPABASE_KEY = key;
+  MACHINE_ID   = machine || 'maquina_01';
+
+  localStorage.setItem('sb_url',     SUPABASE_URL);
+  localStorage.setItem('sb_key',     SUPABASE_KEY);
+  localStorage.setItem('sb_machine', MACHINE_ID);
+
+  startApp();
+}
+
+function showConfig() {
+  document.getElementById('config-overlay').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  if (pollTimer) clearInterval(pollTimer);
+}
+
+function loadSavedConfig() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  const m   = localStorage.getItem('sb_machine');
+  if (url && key) {
+    SUPABASE_URL = url;
+    SUPABASE_KEY = key;
+    MACHINE_ID   = m || 'maquina_01';
+    document.getElementById('cfg-url').value     = url;
+    document.getElementById('cfg-key').value     = key;
+    document.getElementById('cfg-machine').value = MACHINE_ID;
+    startApp();
+  }
+}
+
+// ── API ───────────────────────────────────────────
+async function fetchReadings(minutes) {
+  const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+  const url   = `${SUPABASE_URL}/rest/v1/rpm_readings`
+              + `?machine_id=eq.${encodeURIComponent(MACHINE_ID)}`
+              + `&created_at=gte.${encodeURIComponent(since)}`
+              + `&order=created_at.asc`
+              + `&limit=500`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey':        SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchLatest() {
+  const url = `${SUPABASE_URL}/rest/v1/rpm_readings`
+            + `?machine_id=eq.${encodeURIComponent(MACHINE_ID)}`
+            + `&order=created_at.desc&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      'apikey':        SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data[0] || null;
+}
+
+async function fetchRecent20() {
+  const url = `${SUPABASE_URL}/rest/v1/rpm_readings`
+            + `?machine_id=eq.${encodeURIComponent(MACHINE_ID)}`
+            + `&order=created_at.desc&limit=20`;
+  const res = await fetch(url, {
+    headers: {
+      'apikey':        SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── GAUGE ─────────────────────────────────────────
+function drawGauge(rpm, maxRpm = 3000) {
+  const canvas = document.getElementById('gauge');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H - 10;
+  const r  = H - 20;
+  const startAngle = Math.PI;
+  const endAngle   = 2 * Math.PI;
+  const pct        = Math.min(rpm / maxRpm, 1);
+  const fillAngle  = startAngle + pct * Math.PI;
+
+  // Track bg
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startAngle, endAngle);
+  ctx.strokeStyle = '#182030';
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Colored fill
+  const color = pct > 0.85 ? '#ff2b4a' : pct > 0.6 ? '#ff7300' : '#e8ff00';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startAngle, fillAngle);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ── CHART ─────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('rpmChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'RPM',
+        data: [],
+        borderColor: '#e8ff00',
+        backgroundColor: 'rgba(232,255,0,0.04)',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0e1318',
+          borderColor: '#182030',
+          borderWidth: 1,
+          titleColor: '#3a5068',
+          bodyColor: '#e8ff00',
+          titleFont: { family: 'Share Tech Mono', size: 10 },
+          bodyFont:  { family: 'Share Tech Mono', size: 13 },
+          callbacks: {
+            title: (items) => items[0].label,
+            label: (item)  => ` ${Math.round(item.raw)} RPM`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid:  { color: '#182030' },
+          ticks: { color: '#3a5068', font: { family: 'Share Tech Mono', size: 10 }, maxTicksLimit: 8 }
+        },
+        y: {
+          grid:  { color: '#182030' },
+          ticks: { color: '#3a5068', font: { family: 'Share Tech Mono', size: 10 },
+                   callback: v => `${v}` },
+          min: 0
+        }
+      }
+    }
+  });
+}
+
+function updateChart(readings) {
+  if (!chart) return;
+  chart.data.labels   = readings.map(r => {
+    const d = new Date(r.created_at);
+    return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
+  chart.data.datasets[0].data = readings.map(r => r.rpm);
+
+  // Alert threshold lines
+  const minA = parseFloat(document.getElementById('alert-min').value) || 0;
+  const maxA = parseFloat(document.getElementById('alert-max').value) || 9999;
+  chart.options.scales.y.min = 0;
+
+  chart.update('none');
+}
+
+// ── TABLE ─────────────────────────────────────────
+function updateTable(readings) {
+  const tbody  = document.getElementById('readings-tbody');
+  const minA   = parseFloat(document.getElementById('alert-min').value) || 0;
+  const maxA   = parseFloat(document.getElementById('alert-max').value) || 9999;
+
+  if (!readings.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">Sin datos aún</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = readings.map((r, i) => {
+    const ts      = new Date(r.created_at).toLocaleString('es');
+    const outRange = r.rpm < minA || r.rpm > maxA;
+    const rpmClass = outRange ? 'rpm-cell high' : 'rpm-cell';
+    const estado   = outRange ? `<span style="color:var(--red)">⚠ ALERTA</span>` : `<span style="color:var(--green)">✓ Normal</span>`;
+    return `<tr>
+      <td style="color:var(--muted)">${i + 1}</td>
+      <td>${ts}</td>
+      <td>${r.machine_id}</td>
+      <td class="${rpmClass}">${Math.round(r.rpm)}</td>
+      <td>${estado}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── STATS ─────────────────────────────────────────
+function updateStats(readings) {
+  if (!readings.length) return;
+  const rpms = readings.map(r => r.rpm);
+  const mn   = Math.min(...rpms);
+  const mx   = Math.max(...rpms);
+  const avg  = rpms.reduce((a, b) => a + b, 0) / rpms.length;
+
+  document.getElementById('stat-min').textContent = Math.round(mn);
+  document.getElementById('stat-max').textContent = Math.round(mx);
+  document.getElementById('stat-avg').textContent = Math.round(avg);
+  document.getElementById('info-count').textContent = readings.length;
+}
+
+// ── ALERTS ────────────────────────────────────────
+function checkAlerts(rpm) {
+  const minA  = parseFloat(document.getElementById('alert-min').value) || 0;
+  const maxA  = parseFloat(document.getElementById('alert-max').value) || 9999;
+  const desc  = document.getElementById('alert-desc').value;
+  const banner = document.getElementById('alert-banner');
+  const badge  = document.getElementById('alert-status-badge');
+
+  if (rpm < minA || rpm > maxA) {
+    const msg = rpm < minA
+      ? `${Math.round(rpm)} RPM está por debajo del mínimo (${minA})`
+      : `${Math.round(rpm)} RPM supera el máximo (${maxA})`;
+    document.getElementById('alert-msg').textContent = msg;
+    banner.style.display = 'block';
+    badge.textContent = '⚠ ALERTA';
+    badge.classList.add('triggered');
+    document.getElementById('rpm-display').classList.add('warning');
+  } else {
+    banner.style.display = 'none';
+    badge.textContent = '✓ Normal';
+    badge.classList.remove('triggered');
+    document.getElementById('rpm-display').classList.remove('warning');
+  }
+}
+
+// ── POLL ──────────────────────────────────────────
+async function poll() {
+  try {
+    const [latest, history, recent] = await Promise.all([
+      fetchLatest(),
+      fetchReadings(rangeMinutes),
+      fetchRecent20()
+    ]);
+
+    if (latest) {
+      const rpm = latest.rpm;
+      document.getElementById('rpm-display').textContent = Math.round(rpm);
+      document.getElementById('info-machine').textContent = latest.machine_id;
+      document.getElementById('info-status').textContent  = 'En línea';
+      document.getElementById('info-status').style.color  = 'var(--green)';
+
+      const ts = new Date(latest.created_at);
+      document.getElementById('info-ts').textContent =
+        ts.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('last-update').textContent =
+        'Actualizado ' + ts.toLocaleTimeString('es');
+
+      drawGauge(rpm);
+      checkAlerts(rpm);
+    }
+
+    updateChart(history);
+    updateStats(history);
+    updateTable(recent);
+
+  } catch (err) {
+    document.getElementById('info-status').textContent = 'Error: ' + err.message;
+    document.getElementById('info-status').style.color = 'var(--red)';
+    console.error(err);
+  }
+}
+
+// ── RANGE ─────────────────────────────────────────
+function setRange(min, btn) {
+  rangeMinutes = min;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  poll();
+}
+
+// ── START ─────────────────────────────────────────
+function startApp() {
+  document.getElementById('config-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('machine-label').textContent = MACHINE_ID.toUpperCase();
+
+  if (!chart) initChart();
+  if (pollTimer) clearInterval(pollTimer);
+
+  poll();
+  pollTimer = setInterval(poll, 3000); // actualiza cada 3 segundos
+}
+
+// ── INIT ──────────────────────────────────────────
+loadSavedConfig();
+</script>
+</body>
+</html>

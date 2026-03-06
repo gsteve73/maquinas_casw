@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor RPM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg:      #07090c;
+  --surface: #0e1318;
+  --border:  #182030;
+  --accent:  #e8ff00;
+  --cyan:    #00d4ff;
+  --red:     #ff2b4a;
+  --green:   #00f57a;
+  --orange:  #ff7300;
+  --text:    #c4d4e0;
+  --muted:   #3a5068;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow Condensed', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+/* ── HEADER ── */
+header {
+  padding: 24px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brand-name {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 0 0 30px rgba(232,255,0,0.3);
+}
+
+.brand-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+
+.header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.live-badge {
+  display: flex; align-items: center; gap: 7px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem; letter-spacing: 1px;
+  color: var(--green);
+  border: 1px solid rgba(0,245,122,0.3);
+  padding: 5px 12px; border-radius: 2px;
+}
+
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:0.3; transform:scale(0.7); }
+}
+
+.last-update {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem; color: var(--muted);
+}
+
+/* ── ALERT BANNER ── */
+#alert-banner {
+  display: none;
+  background: rgba(255,43,74,0.08);
+  border: 1px solid rgba(255,43,74,0.35);
+  border-left: 4px solid var(--red);
+  border-radius: 4px;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.82rem; color: var(--red);
+  animation: flash 0.8s ease-in-out 3;
+}
+@keyframes flash { 50% { opacity: 0.4; } }
+
+/* ── RPM HERO ── */
+.rpm-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 36px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  position: relative;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.rpm-hero::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+}
+
+.rpm-label {
+  font-size: 0.65rem; letter-spacing: 4px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+}
+
+.rpm-value {
+  font-size: clamp(4rem, 10vw, 7rem);
+  font-weight: 900; line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 40px rgba(232,255,0,0.25);
+  transition: color 0.4s; letter-spacing: -2px;
+}
+
+.rpm-value.warning { color: var(--red); text-shadow: 0 0 40px rgba(255,43,74,0.4); }
+.rpm-unit { font-size: 1.4rem; font-weight: 300; color: var(--muted); letter-spacing: 3px; margin-top: 4px; }
+
+.gauge-wrap { position: relative; width: 180px; height: 100px; flex-shrink: 0; }
+.gauge-label {
+  position: absolute; bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem; color: var(--muted); white-space: nowrap;
+}
+
+.machine-info { display: flex; flex-direction: column; gap: 12px; }
+.info-row { display: flex; flex-direction: column; }
+.info-key { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.info-val { font-family: 'Share Tech Mono', monospace; font-size: 0.9rem; color: var(--text); }
+
+/* ── STATS ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 18px 20px;
+  position: relative; overflow: hidden;
+}
+
+.stat-card::after {
+  content: ''; position: absolute;
+  bottom: 0; left: 0; right: 0; height: 2px;
+}
+.stat-card.min::after { background: var(--cyan); }
+.stat-card.max::after { background: var(--orange); }
+.stat-card.avg::after { background: var(--green); }
+
+.stat-label { font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.stat-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+.stat-card.min .stat-value { color: var(--cyan); }
+.stat-card.max .stat-value { color: var(--orange); }
+.stat-card.avg .stat-value { color: var(--green); }
+.stat-unit { font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+
+/* ── CHART ── */
+.chart-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 22px; margin-bottom: 20px;
+}
+
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 18px; flex-wrap: wrap; gap: 10px;
+}
+
+.panel-title { font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); }
+
+.range-btns { display: flex; gap: 4px; }
+.range-btn {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
+  padding: 4px 12px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted);
+  border-radius: 2px; cursor: pointer; letter-spacing: 1px; transition: all 0.15s;
+}
+.range-btn.active, .range-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(232,255,0,0.05); }
+.chart-container { position: relative; height: 240px; }
+
+/* ── ALERT CONFIG ── */
+.alert-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 22px; margin-bottom: 20px;
+}
+
+.alert-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+.alert-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
+.alert-field label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.alert-field input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+  padding: 8px 12px; color: var(--text);
+  font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
+  outline: none; transition: border-color 0.2s; width: 100%;
+}
+.alert-field input:focus { border-color: var(--accent); }
+
+.alert-status {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.75rem;
+  padding: 8px 14px; border-radius: 3px;
+  border: 1px solid var(--border); color: var(--green); white-space: nowrap;
+}
+.alert-status.triggered { border-color: rgba(255,43,74,0.35); color: var(--red); background: rgba(255,43,74,0.08); }
+
+/* ── TABLE ── */
+.table-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 22px; overflow-x: auto;
+}
+
+table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: 0.8rem; }
+th { text-align: left; padding: 8px 14px; font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+td { padding: 10px 14px; border-bottom: 1px solid rgba(24,32,48,0.6); color: var(--text); }
+tr:hover td { background: rgba(255,255,255,0.02); }
+tr:last-child td { border-bottom: none; }
+.rpm-cell { color: var(--accent); font-weight: 600; }
+.rpm-cell.high { color: var(--red); }
+
+/* ── ERROR STATE ── */
+#error-msg {
+  display: none;
+  background: rgba(255,43,74,0.06);
+  border: 1px solid rgba(255,43,74,0.2);
+  border-radius: 4px;
+  padding: 16px 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem; color: var(--red);
+  margin-bottom: 20px;
+}
+
+footer {
+  text-align: center; padding: 20px 0 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem; color: var(--muted); letter-spacing: 1px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid .stat-card:last-child { grid-column: span 2; }
+  .rpm-hero { justify-content: center; text-align: center; }
+  .gauge-wrap { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div>
+      <div class="brand-name">⬡ RPM Monitor</div>
+      <div class="brand-sub" id="machine-label">Cargando...</div>
+    </div>
+    <div class="header-right">
+      <div class="live-badge"><div class="live-dot"></div>EN VIVO</div>
+      <div class="last-update" id="last-update">—</div>
+    </div>
+  </header>
+
+  <div id="error-msg"></div>
+  <div id="alert-banner">⚠ ALERTA: <span id="alert-msg"></span></div>
+
+  <!-- RPM Hero -->
+  <div class="rpm-hero">
+    <div>
+      <div class="rpm-label">Velocidad actual</div>
+      <div class="rpm-value" id="rpm-display">—</div>
+      <div class="rpm-unit">RPM</div>
+    </div>
+
+    <div class="gauge-wrap">
+      <canvas id="gauge" width="180" height="100"></canvas>
+      <div class="gauge-label">0 ——— 3000 RPM</div>
+    </div>
+
+    <div class="machine-info">
+      <div class="info-row">
+        <span class="info-key">Máquina</span>
+        <span class="info-val" id="info-machine">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Estado</span>
+        <span class="info-val" id="info-status" style="color:var(--green)">Conectando...</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Lecturas en rango</span>
+        <span class="info-val" id="info-count">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Última lectura</span>
+        <span class="info-val" id="info-ts">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card min">
+      <div class="stat-label">Mínimo</div>
+      <div class="stat-value" id="stat-min">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+    <div class="stat-card max">
+      <div class="stat-label">Máximo</div>
+      <div class="stat-value" id="stat-max">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+    <div class="stat-card avg">
+      <div class="stat-label">Promedio</div>
+      <div class="stat-value" id="stat-avg">—</div>
+      <div class="stat-unit">RPM</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-panel">
+    <div class="panel-header">
+      <div class="panel-title">Historial de RPM</div>
+      <div class="range-btns">
+        <button class="range-btn active" onclick="setRange(5,this)">5 min</button>
+        <button class="range-btn" onclick="setRange(15,this)">15 min</button>
+        <button class="range-btn" onclick="setRange(60,this)">1 hora</button>
+        <button class="range-btn" onclick="setRange(1440,this)">24 h</button>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="rpmChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="alert-panel">
+    <div class="panel-header">
+      <div class="panel-title">Configuración de alertas</div>
+      <div class="alert-status" id="alert-badge">✓ Normal</div>
+    </div>
+    <div class="alert-row">
+      <div class="alert-field">
+        <label>RPM Mínimo</label>
+        <input type="number" id="alert-min" value="200"/>
+      </div>
+      <div class="alert-field">
+        <label>RPM Máximo</label>
+        <input type="number" id="alert-max" value="3000"/>
+      </div>
+      <div class="alert-field" style="flex:2">
+        <label>Descripción del rango</label>
+        <input type="text" id="alert-desc" value="Rango operativo normal"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-panel">
+    <div class="panel-header">
+      <div class="panel-title">Últimas 20 lecturas</div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Timestamp</th><th>Máquina</th><th>RPM</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Cargando datos...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>RPM MONITOR · Datos en vivo · Actualiza cada 3 seg · Powered by Supabase + Vercel</footer>
+</div>
+
+<script>
+let chart      = null;
+let rangeMin   = 5;
+let pollTimer  = null;
+
+// ── GAUGE ──────────────────────────────────────────
+function drawGauge(rpm, maxRpm = 3000) {
+  const canvas = document.getElementById('gauge');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H - 10, r = H - 20;
+  const pct = Math.min(rpm / maxRpm, 1);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
+  ctx.strokeStyle = '#182030'; ctx.lineWidth = 14; ctx.lineCap = 'round'; ctx.stroke();
+
+  const color = pct > 0.85 ? '#ff2b4a' : pct > 0.6 ? '#ff7300' : '#e8ff00';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, Math.PI + pct * Math.PI);
+  ctx.strokeStyle = color; ctx.lineWidth = 14; ctx.lineCap = 'round';
+  ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.stroke(); ctx.shadowBlur = 0;
+}
+
+// ── CHART ──────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('rpmChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{
+      label: 'RPM', data: [],
+      borderColor: '#e8ff00',
+      backgroundColor: 'rgba(232,255,0,0.04)',
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, fill: true
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 250 },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0e1318', borderColor: '#182030', borderWidth: 1,
+          titleColor: '#3a5068', bodyColor: '#e8ff00',
+          titleFont: { family: 'Share Tech Mono', size: 10 },
+          bodyFont:  { family: 'Share Tech Mono', size: 13 },
+          callbacks: {
+            title: i => i[0].label,
+            label: i => ` ${Math.round(i.raw)} RPM`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#182030' }, ticks: { color: '#3a5068', font: { family: 'Share Tech Mono', size: 10 }, maxTicksLimit: 8 }},
+        y: { grid: { color: '#182030' }, ticks: { color: '#3a5068', font: { family: 'Share Tech Mono', size: 10 }}, min: 0 }
+      }
+    }
+  });
+}
+
+// ── FETCH desde /api/data (serverless function) ────
+async function apiFetch(type, minutes) {
+  const params = new URLSearchParams({ type });
+  if (minutes) params.set('minutes', minutes);
+  const res = await fetch(`/api/data?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── POLL ───────────────────────────────────────────
+async function poll() {
+  try {
+    const [latestRes, historyRes, recentRes] = await Promise.all([
+      apiFetch('latest'),
+      apiFetch('history', rangeMin),
+      apiFetch('recent')
+    ]);
+
+    document.getElementById('error-msg').style.display = 'none';
+
+    // Machine label (una sola vez)
+    if (latestRes.machine_id) {
+      document.getElementById('machine-label').textContent = latestRes.machine_id.toUpperCase();
+      document.getElementById('info-machine').textContent  = latestRes.machine_id;
+    }
+
+    // Latest RPM
+    const latest = latestRes.data[0];
+    if (latest) {
+      const rpm = latest.rpm;
+      document.getElementById('rpm-display').textContent = Math.round(rpm);
+      document.getElementById('info-status').textContent = 'En línea';
+      document.getElementById('info-status').style.color = 'var(--green)';
+
+      const ts = new Date(latest.created_at);
+      document.getElementById('info-ts').textContent =
+        ts.toLocaleTimeString('es', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      document.getElementById('last-update').textContent =
+        'Act. ' + ts.toLocaleTimeString('es');
+
+      drawGauge(rpm);
+      checkAlerts(rpm);
+    }
+
+    // History → chart + stats
+    const history = historyRes.data;
+    document.getElementById('info-count').textContent = history.length;
+    updateChart(history);
+    updateStats(history);
+
+    // Recent → table
+    updateTable(recentRes.data);
+
+  } catch (err) {
+    const el = document.getElementById('error-msg');
+    el.style.display = 'block';
+    el.textContent = '⚠ Error al conectar: ' + err.message;
+    document.getElementById('info-status').textContent = 'Sin conexión';
+    document.getElementById('info-status').style.color = 'var(--red)';
+    console.error(err);
+  }
+}
+
+function updateChart(readings) {
+  if (!chart || !readings.length) return;
+  chart.data.labels = readings.map(r => {
+    const d = new Date(r.created_at);
+    return d.toLocaleTimeString('es', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  });
+  chart.data.datasets[0].data = readings.map(r => r.rpm);
+  chart.update('none');
+}
+
+function updateStats(readings) {
+  if (!readings.length) return;
+  const rpms = readings.map(r => r.rpm);
+  document.getElementById('stat-min').textContent = Math.round(Math.min(...rpms));
+  document.getElementById('stat-max').textContent = Math.round(Math.max(...rpms));
+  document.getElementById('stat-avg').textContent = Math.round(rpms.reduce((a,b) => a+b, 0) / rpms.length);
+}
+
+function updateTable(readings) {
+  const tbody = document.getElementById('tbody');
+  const minA  = parseFloat(document.getElementById('alert-min').value) || 0;
+  const maxA  = parseFloat(document.getElementById('alert-max').value) || 99999;
+  if (!readings.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Sin datos</td></tr>';
+    return;
+  }
+  tbody.innerHTML = readings.map((r, i) => {
+    const out = r.rpm < minA || r.rpm > maxA;
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${new Date(r.created_at).toLocaleString('es')}</td>
+      <td>${r.machine_id}</td>
+      <td class="rpm-cell${out?' high':''}">${Math.round(r.rpm)}</td>
+      <td>${out ? '<span style="color:var(--red)">⚠ Alerta</span>' : '<span style="color:var(--green)">✓ Normal</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function checkAlerts(rpm) {
+  const minA   = parseFloat(document.getElementById('alert-min').value) || 0;
+  const maxA   = parseFloat(document.getElementById('alert-max').value) || 99999;
+  const banner = document.getElementById('alert-banner');
+  const badge  = document.getElementById('alert-badge');
+  const rpmEl  = document.getElementById('rpm-display');
+
+  if (rpm < minA || rpm > maxA) {
+    const msg = rpm < minA
+      ? `${Math.round(rpm)} RPM está por debajo del mínimo (${minA})`
+      : `${Math.round(rpm)} RPM supera el máximo (${maxA})`;
+    document.getElementById('alert-msg').textContent = msg;
+    banner.style.display = 'block';
+    badge.textContent = '⚠ ALERTA'; badge.classList.add('triggered');
+    rpmEl.classList.add('warning');
+  } else {
+    banner.style.display = 'none';
+    badge.textContent = '✓ Normal'; badge.classList.remove('triggered');
+    rpmEl.classList.remove('warning');
+  }
+}
+
+function setRange(min, btn) {
+  rangeMin = min;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  poll();
+}
+
+// ── INIT ───────────────────────────────────────────
+initChart();
+poll();
+pollTimer = setInterval(poll, 3000);
+</script>
+</body>
+</html>
